@@ -1,0 +1,14 @@
+# Intellij
+.idea
+
+# KDE
+.directory
+
+# Python
+*.pyc
+
+# SVN
+.svn
+
+# Kate
+*~
