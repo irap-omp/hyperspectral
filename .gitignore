@@ -12,3 +12,6 @@
 
 # Kate
 *~
+
+# Distutils
+dist/*
