@@ -37,8 +37,8 @@ class HyperspectralCube(NDData):
     by spectroscopic explorers such as MUSE.
 
     This class is essentially a convenience wrapper for data and metadata of a
-    single hyperspectral cube, built atop astropy's growing NDData. As such, it
-    may be subject to breaking changes without notice. The API will be deemed
+    single hyperspectral cube, built atop `astropy`'s growing `NDData`. As such,
+    it may be subject to breaking changes without notice. The API will be deemed
     frozen and stable when astropy will be released as v1.0.0.
 
     It understands indexation (getting and setting) of the form
@@ -77,7 +77,6 @@ class HyperspectralCube(NDData):
 
     ... and other parameters inherited from NDData.
 
-
     """
 
     def __init__(self, data=None, x=None, y=None, z=None,
@@ -99,6 +98,8 @@ class HyperspectralCube(NDData):
         self.y = y
         self.z = z
         self.axes = [z, y, x]
+
+    ## FACTORIES ###############################################################
 
     @staticmethod
     def from_fits(filename, hdu_index=None, verbose=False):
@@ -248,13 +249,7 @@ class HyperspectralCube(NDData):
     #
     #     return HyperspectralCube(data=data, header=header, verbose=verbose)
 
-    def is_empty(self):
-        """
-        Is this cube void of any data ?
-
-        return boolean
-        """
-        return self.data is None or len(self.data.shape) == 0
+    ## STATICS #################################################################
 
     @staticmethod
     def sanitize_fits_header(header):
@@ -267,6 +262,7 @@ class HyperspectralCube(NDData):
             - CD3_3   --> CDELT3
         - Fix blatantly illegal units :
             - DEG     --> deg
+            - MICRON  --> um
             - MICRONS --> um
 
         This is where we'll add additional sanitization tasks as users report
@@ -297,6 +293,147 @@ class HyperspectralCube(NDData):
                 elif 'micron' in unit.lower():
                     unit = 'um'
                 header.set(unit_keyword, unit)
+
+    ## API - EXPORT ############################################################
+
+    def to_fits(self, filepath, clobber=False):
+        """
+        Write this cube to a FITS file located at `filepath`, which *must* end
+        with the extension `.fits`.
+
+        filepath: string
+            The filepath (absolute or relative) of the file we want to write to.
+            The `astropy.io.fits` module is used to write to the file.
+            Examples : 'out/my_cube.fits' or '/var/fits/my_cube.fits'.
+        clobber: bool
+            When set to True, will overwrite the output file if it exists.
+        """
+        if 'fits' in self.meta:
+            header = self.meta['fits']
+        else:
+            header = fits.Header()
+            header['CDELT3'] = self.axes[0].step
+            # todo: fill up the header with information from the axes
+            raise NotImplementedError(
+                "Cannot write a cube to a FITS file if it has not been created "
+                "from a FITS file. Ask for the feature if you need it !"
+            )
+        primary_hdu = fits.PrimaryHDU(data=self.data, header=header)
+        hdulist = fits.HDUList([primary_hdu])
+        hdulist.writeto(filepath, clobber=clobber)
+        if self.verbose:
+            log.info("Writing HyperspectralCube to file %s.", filepath)
+            # Note: astropy already logs something similar
+
+    ## API - INFORMATION #######################################################
+
+    def is_empty(self):
+        """
+        Is this cube void of any data ?
+
+        return boolean
+        """
+        return self.data is None or len(self.data.shape) == 0
+
+    def copy(self, out=None):
+        """
+        Copies this cube into `out` (if specified) and returns the copy.
+
+        Not sure about the usefulness of the `out` parameter ; may change later.
+
+        :rtype: HyperspectralCube
+        """
+        data = copy(self.data)
+
+        out = HyperspectralCube(
+            data=data,
+            x=self.x.copy(), y=self.y.copy(), z=self.z.copy(),
+            uncertainty=copy(self.uncertainty), wcs=copy(self.wcs),
+            mask=copy(self.mask), flags=copy(self.flags),
+            meta=copy(self.meta), unit=copy(self.unit)
+        )
+
+        return out
+
+    def has_metadata(self, axis=None):
+        if axis is None:
+            return \
+                self.has_metadata(0) and \
+                self.has_metadata(1) and \
+                self.has_metadata(2)
+        else:
+            if axis < 0 or axis > 2:
+                raise ValueError("Invalid axis '%s'. "
+                                 "Accepted values: 0,1,2." % axis)
+            # if it's not the default UndefinedAxis, we're ok.
+            return not isinstance(self.axes[axis], UndefinedAxis)
+
+    def get_step(self, axis):
+        """
+        Returns the step along `axis` in the unit specified by the header.
+        Axis values are following FITS conventions:
+            - 0 for λ
+            - 1 for y
+            - 2 for x
+
+        :rtype: astropy.units.Quantity
+        """
+        if not self.has_metadata(axis):
+            raise ValueError("Cannot get the step along axis #%s "
+                             "of a cube without metadata." % axis)
+
+        return Quantity(self.axes[axis].step, self.axes[axis].unit)
+
+    def get_steps(self):
+        """
+        Returns a list of the 3 steps for the axes [λ,y,x], in that order,
+        as `astropy.units.Quantity`.
+
+        :rtype: list of astropy.units.Quantity
+        """
+        if not self.has_metadata():
+            raise IOError("Cannot get the steps of a cube without metadata.")
+        return [self.get_step(0), self.get_step(1), self.get_step(2)]
+
+    def pixel_of(self, wavelength):
+        """
+        Returns the pixel index (starting at 0) for the passed `wavelength`,
+        whose unit is assumed to be the one specified in the metadata for the
+        spectral axis. You can provide a Quantity object with its own Unit, as
+        long as it is compatible with the Unit of the Z axis. For instance,
+        centimeters and Angstroms are compatible, but Hertz and meters are not.
+
+        The parameter `wavelength` may also be a list of wavelengths.
+
+        :rtype: float | list of float
+        """
+        if isinstance(wavelength, str):
+            wavelength = float(wavelength)
+        if not isinstance(wavelength, Quantity):
+            wavelength = Quantity(wavelength, self.z.unit)
+
+        # Creating a Quantity object ensures that the units are merged properly,
+        # because sometimes they are not and we get a (cm) / (m) Unit
+        return Quantity((wavelength - self.z.start) / self.z.step, '').value
+
+    def wavelength_of(self, pixel):
+        """
+        Get the wavelength (in the unit specified in the header) of the
+        specified pixel index along z.
+        The pixel index should start at 0.
+
+        The parameter `pixel` may also be a list of pixel indices.
+
+        :rtype: Quantity
+        """
+        if isinstance(pixel, str):
+            pixel = float(pixel)
+        if not isinstance(pixel, Quantity):
+            pixel = Quantity(pixel, '')
+
+        return pixel * self.z.step + self.z.start
+
+    ## MAGIC METHODS ###########################################################
 
     def __str__(self):
         """
@@ -423,119 +560,6 @@ class HyperspectralCube(NDData):
             raise KeyError("Cannot use [:,:,:] setter on empty cube.")
 
         self.data[key] = value  # numpy will raise appropriate errors
-
-    def copy(self, out=None):
-        """
-        Copies this cube into `out` (if specified) and returns the copy.
-
-        :rtype: HyperspectralCube
-        """
-        data = copy(self.data)
-
-        out = HyperspectralCube(
-            data=data,
-            x=self.x.copy(), y=self.y.copy(), z=self.z.copy(),
-            uncertainty=copy(self.uncertainty), wcs=copy(self.wcs),
-            mask=copy(self.mask), flags=copy(self.flags),
-            meta=copy(self.meta), unit=copy(self.unit)
-        )
-
-        return out
-
-    # def write_to(self, filename, clobber=False):
-    #     """
-    #     Write this cube to a FITS file.
-    #
-    #     filename: string
-    #         The filename (absolute or relative) of the file we want to write to.
-    #         The `astropy.io.fits` module is used to write to the file.
-    #     clobber: bool
-    #         When set to True, will overwrite the output file if it exists.
-    #     """
-    #     primary_hdu = fits.PrimaryHDU(data=self.data, header=self.header)
-    #     hdulist = fits.HDUList([primary_hdu])
-    #     hdulist.writeto(filename, clobber=clobber)
-    #     if self.verbose:
-    #         log.info("Writing HyperspectralCube to file %s.", filename)
-    #         # Note: astropy already logs something similar, is this really necessary ?
-
-    def has_metadata(self, axis=None):
-        if axis is None:
-            return \
-                self.has_metadata(0) and \
-                self.has_metadata(1) and \
-                self.has_metadata(2)
-        else:
-            if axis < 0 or axis > 2:
-                raise ValueError("Invalid axis '%s'. "
-                                 "Accepted values: 0,1,2." % axis)
-            # if it's not the default UndefinedAxis, we're ok.
-            return not isinstance(self.axes[axis], UndefinedAxis)
-
-    def get_step(self, axis):
-        """
-        Returns the step along `axis` in the unit specified by the header.
-        Axis values are following FITS conventions:
-            - 0 for λ
-            - 1 for y
-            - 2 for x
-
-        :rtype: astropy.units.Quantity
-        """
-        if not self.has_metadata(axis):
-            raise ValueError("Cannot get the step along axis #%s "
-                             "of a cube without metadata." % axis)
-
-        return Quantity(self.axes[axis].step, self.axes[axis].unit)
-
-    def get_steps(self):
-        """
-        Returns a list of the 3 steps for the axes [λ,y,x], in that order,
-        as `astropy.units.Quantity`.
-
-        :rtype: list of astropy.units.Quantity
-        """
-        if not self.has_metadata():
-            raise IOError("Cannot get the steps of a cube without metadata.")
-        return [self.get_step(0), self.get_step(1), self.get_step(2)]
-
-    def pixel_of(self, wavelength):
-        """
-        Returns the pixel index (starting at 0) for the passed `wavelength`,
-        whose unit is assumed to be the one specified in the metadata for the
-        spectral axis. You can provide a Quantity object with its own Unit, as
-        long as it is compatible with the Unit of the Z axis. For instance,
-        centimeters and Angstroms are compatible, but Hertz and meters are not.
-
-        The parameter `wavelength` may also be a list of wavelengths.
-
-        :rtype: float | list of float
-        """
-        if isinstance(wavelength, str):
-            wavelength = float(wavelength)
-        if not isinstance(wavelength, Quantity):
-            wavelength = Quantity(wavelength, self.z.unit)
-
-        # Creating a Quantity object ensures that the units are merged properly,
-        # because sometimes they are not and we get a (cm) / (m) Unit
-        return Quantity((wavelength - self.z.start) / self.z.step, '').value
-
-    def wavelength_of(self, pixel):
-        """
-        Get the wavelength (in the unit specified in the header) of the
-        specified pixel index along z.
-        The pixel index should start at 0.
-
-        The parameter `pixel` may also be a list of pixel indices.
-
-        :rtype: Quantity
-        """
-        if isinstance(pixel, str):
-            pixel = float(pixel)
-        if not isinstance(pixel, Quantity):
-            pixel = Quantity(pixel, '')
-
-        return pixel * self.z.step + self.z.start
 
     ## ARITHMETIC ##############################################################
 

@@ -1,11 +1,11 @@
- 
+
 This is a frugal python package of miscellaneous hyperspectral data goodies.
 
 Dependencies
 ============
 
-- astropy
-- numpy
+- [astropy](http://www.astropy.org)
+- [numpy](http://www.numpy.org)
 
 
 Testing Dependencies
@@ -13,7 +13,7 @@ Testing Dependencies
 
 You don't need those unless you're running the test suite.
 
-- unittest
+- [unittest](https://docs.python.org/2/library/unittest.html)
 - [ddt](https://github.com/txels/ddt)
 
 

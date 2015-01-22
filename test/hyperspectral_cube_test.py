@@ -206,22 +206,26 @@ class HyperspectralCubeTest(unittest.TestCase, NumpyNdArrayAssertions):
             "pixel_of() supports a numpy array as input"
         )
 
-    # def test_write_to_file(self):
-    #     cube = HyperspectralCube.from_fits(self.fits_test_filename)
-    #     fits_out_filename = os.path.join(self.fits_folder, 'tmp_output.fits')
-    #
-    #     self.assertFalse(os.path.isfile(fits_out_filename),
-    #                      "Sanity check : Output FITS file should not exist ; "
-    #                      "Please remove it by hand and then re-run this test : %s" % fits_out_filename)
-    #     cube.write_to(fits_out_filename)
-    #     self.assertTrue(os.path.isfile(fits_out_filename),
-    #                     "Output FITS file should be created")
-    #
-    #     with self.assertRaises(IOError):
-    #         cube.write_to(fits_out_filename)  # clobber option should be false by default
-    #
-    #     cube.write_to(fits_out_filename, clobber=True)  # overwrites without raising
-    #     os.remove(fits_out_filename)  # cleanup
+    def test_write_to_fits_file(self):
+        cube = HyperspectralCube.from_fits(self.muse_01_filename)
+        fits_out_filename = os.path.join(self.fits_folder, 'tmp_output.fits')
+
+        self.assertFalse(os.path.isfile(fits_out_filename),
+                         "Sanity check : Output FITS file should not exist ; "
+                         "Please remove it by hand and then "
+                         "re-run this test : %s" % fits_out_filename)
+        cube.to_fits(fits_out_filename)
+        self.assertTrue(os.path.isfile(fits_out_filename),
+                        "Output FITS file should be created")
+
+        # `clobber` option should be false by default
+        with self.assertRaises(IOError):
+            cube.to_fits(fits_out_filename)
+
+        # clobber without raising
+        cube.to_fits(fits_out_filename, clobber=True)
+
+        os.remove(fits_out_filename)  # cleanup
 
     ## DATA-DRIVEN TESTS #######################################################
 
