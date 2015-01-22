@@ -25,6 +25,7 @@ setup(
     package_dir={'hyperspectral': 'lib'},
     packages=['hyperspectral'],
     data_files=[('', [
+        'README.md',
         'VERSION',
     ])],
 
