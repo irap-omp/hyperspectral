@@ -20,11 +20,14 @@ setup(
     maintainer_email='antoine@goutenoir.com',
     url='https://github.com/irap-omp/hyperspectral',
     description="A frugal python package with some hyperspectral data goodies.",
-    license='Science',
+    license='Science!',
+
     package_dir={'hyperspectral': 'lib'},
     packages=['hyperspectral'],
-    # py_modules=['lib'],
-    data_files=[('', ['VERSION'])],
+    data_files=[('', [
+        'VERSION',
+    ])],
+
     requires=['astropy', 'numpy'],
     provides=['hyperspectral'],
 )
