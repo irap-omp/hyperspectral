@@ -2,5 +2,6 @@
 README
 VERSION
 setup.py
+lib/__init__.py
 lib/axes.py
 lib/hyperspectral_cube.py

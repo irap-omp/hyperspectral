@@ -21,9 +21,10 @@ setup(
     url='https://github.com/irap-omp/hyperspectral',
     description="A frugal python package with some hyperspectral data goodies.",
     license='Science',
-    package_dir={'': 'lib'},
+    package_dir={'hyperspectral': 'lib'},
+    packages=['hyperspectral'],
+    # py_modules=['lib'],
     data_files=[('', ['VERSION'])],
-    py_modules=['axes', 'hyperspectral_cube'],
     requires=['astropy', 'numpy'],
     provides=['hyperspectral'],
 )
