@@ -198,7 +198,7 @@ class HyperspectralCube(NDData):
             if meta is None:
                 headerdump = _header.tostring("\n        ").strip()
                 raise IOError("Did not find any header card for any of (%s) "
-                              "in header:\n%s" % (_names.join(), headerdump))
+                              "in header:\n%s" % ("\n".join(_names), headerdump))
             return meta
 
         def _get_axis_from_header(_header, _id):
