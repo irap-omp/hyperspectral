@@ -185,21 +185,24 @@ class HyperspectralCube(NDData):
         # II. Collect and numpyfy data
         data = np.array(hdu.data, dtype=float)
 
-        def _get_meta(_header, _names):
+        def _get_meta(_header, _names, default=None):
             """
             Local utility to fetch a header card value that can have many names.
             Will try (in order) the names in _names and stop at first found.
+            If none is found and the default is not set, will yell.
             """
-            meta = None
+            _meta = None
             k = 0
-            while meta is None and k < len(_names):
-                meta = _header.get(_names[k])
+            while _meta is None and k < len(_names):
+                _meta = _header.get(_names[k])
                 k += 1
-            if meta is None:
+            if _meta is None:
+                _meta = default
+            if _meta is None:
                 headerdump = _header.tostring("\n        ").strip()
                 raise IOError("Did not find any header card for any of (%s) "
                               "in header:\n%s" % (",".join(_names), headerdump))
-            return meta
+            return _meta
 
         def _get_axis_from_header(_header, _id):
             """
@@ -207,6 +210,8 @@ class HyperspectralCube(NDData):
             from the FITS header. As FITS files authors are pretty whimsical
             regarding the names of the header cards, we check for as many names
             as we can.
+
+            Note that _id
             """
             _step = _get_meta(_header, [
                 'CDELT%d' % _id,
@@ -218,7 +223,7 @@ class HyperspectralCube(NDData):
             _val = _get_meta(_header, ['CRVAL%d' % _id])
             _start = _val - (_get_meta(_header, ['CRPIX%d' % _id]) - 1.) * _step
             return Axis(
-                _get_meta(_header, ['CTYPE%d' % _id]),
+                _get_meta(_header, ['CTYPE%d' % _id], default='Axis%d' % _id),
                 _start,
                 _step,
                 Unit(_get_meta(_header, ['CUNIT%d' % _id])),
