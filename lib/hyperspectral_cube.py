@@ -80,11 +80,14 @@ class HyperspectralCube(NDData):
     """
 
     def __init__(self, data=None, x=None, y=None, z=None,
-                 uncertainty=None, mask=None, flags=None,
-                 wcs=None, meta=None, unit=None, verbose=False):
+                 uncertainty=None, mask=None, wcs=None,
+                 meta=None, unit=None, verbose=False):
+        if data is None:
+            data = []
+        data = np.array(data)
         super(HyperspectralCube, self).__init__(
-            data, uncertainty=uncertainty,
-            mask=mask, flags=flags,
+            data,
+            uncertainty=uncertainty, mask=mask,
             wcs=wcs, meta=meta, unit=unit
         )
         self.verbose = verbose
@@ -332,13 +335,31 @@ class HyperspectralCube(NDData):
 
     ## API - INFORMATION #######################################################
 
+    @property
+    def shape(self):
+        return self.data.shape
+
+    @property
+    def size(self):
+        return self.data.size
+
+    @property
+    def ndim(self):
+        return self.data.ndim
+
+    @property
+    def dtype(self):
+        return self.data.dtype
+
     def is_empty(self):
         """
         Is this cube void of any data ?
 
         return boolean
         """
-        return self.data is None or len(self.data.shape) == 0
+        return self.data is None \
+            or len(self.data.shape) == 0 \
+            or (len(self.data.shape) == 1 and self.data.shape[0] == 0)
 
     def copy(self, out=None):
         """
@@ -354,8 +375,7 @@ class HyperspectralCube(NDData):
             data=data,
             x=self.x.copy(), y=self.y.copy(), z=self.z.copy(),
             uncertainty=copy(self.uncertainty), wcs=copy(self.wcs),
-            mask=copy(self.mask), flags=copy(self.flags),
-            meta=copy(self.meta), unit=copy(self.unit)
+            mask=copy(self.mask), meta=copy(self.meta), unit=copy(self.unit)
         )
 
         return out
@@ -452,7 +472,6 @@ class HyperspectralCube(NDData):
         meta = ''
         indent = '        '
         for key in self.meta:
-            print key + 'caca'
             meta += '\n' + indent + key
             if key == 'fits' and isinstance(self.meta[key], fits.Header):
                 meta += ':\n' + indent+indent + \
@@ -467,6 +486,17 @@ class HyperspectralCube(NDData):
     y: {s.y}
     x: {s.x}
 """.format(s=self, meta=meta, data=data)
+
+    def __array__(self):
+        """
+        This allows code that requests a Numpy array to use a HyperspectralCube
+        object as a Numpy array.
+
+        """
+        if self.mask is not None:
+            return np.ma.masked_array(self.data, self.mask)
+        else:
+            return self.data
 
     def __getitem__(self, key):
         """
@@ -495,8 +525,8 @@ class HyperspectralCube(NDData):
         # We need the shape before the cut, to handle negative values in `key`.
         old_shape = self.shape
 
-        # Make the cut using parent's method
-        new_data = super(HyperspectralCube, self).__getitem__(key)
+        # Make the cut in the data, leveraging numpy's internals
+        new_data = self.data[key]
 
         # Utility function to create an axis that is a slice of another
         def _get_adjusted_axis(_axis, _index, _key):
@@ -538,12 +568,14 @@ class HyperspectralCube(NDData):
             raise TypeError("Selector %s has too many elements." % key)
 
         # Slice the metadata : the axes
-        new_data.z = _get_adjusted_axis(self.z, 0, key)
-        new_data.y = _get_adjusted_axis(self.y, 1, key)
-        new_data.x = _get_adjusted_axis(self.x, 2, key)
-        new_data.axes = [new_data.z, new_data.y, new_data.x]
+        new_cube = HyperspectralCube(
+            new_data,
+            x=_get_adjusted_axis(self.x, 2, key),
+            y=_get_adjusted_axis(self.y, 1, key),
+            z=_get_adjusted_axis(self.z, 0, key),
+        )
 
-        return new_data
+        return new_cube
 
     def __setitem__(self, key, value):
         """
@@ -598,11 +630,7 @@ class HyperspectralCube(NDData):
             if not self.has_same_referential_as(other):
                 raise TypeError("Cannot add HyperspectralCubes with different "
                                 "referentials.")
-            result = self.add(other)
-            result.x = self.x
-            result.y = self.y
-            result.z = self.z
-            return result
+            data = self.data + other.data
         else:
             # other types, numpy will raise when inappropriate
             data = self.data + other
@@ -639,11 +667,7 @@ class HyperspectralCube(NDData):
             if not self.has_same_referential_as(other):
                 raise TypeError("Cannot subtract HyperspectralCubes with "
                                 "different referentials.")
-            result = self.subtract(other)
-            result.x = self.x
-            result.y = self.y
-            result.z = self.z
-            return result
+            data = self.data - other.data
         else:
             # other types, numpy will raise when inappropriate
             data = self.data - other
@@ -673,11 +697,7 @@ class HyperspectralCube(NDData):
             if not self.has_same_referential_as(other):
                 raise TypeError("Cannot subtract HyperspectralCubes with "
                                 "different referentials.")
-            result = other.subtract(self)
-            result.x = self.x
-            result.y = self.y
-            result.z = self.z
-            return result
+            data = other.data - self.data
         else:
             # other types, numpy will raise when inappropriate
             data = other - self.data
@@ -713,11 +733,7 @@ class HyperspectralCube(NDData):
             if not self.has_same_referential_as(other):
                 raise TypeError("Cannot multiply HyperspectralCubes with "
                                 "different referentials.")
-            result = self.multiply(other)
-            result.x = self.x
-            result.y = self.y
-            result.z = self.z
-            return result
+            data = self.data * other.data
         else:
             # other types, numpy will raise when inappropriate
             data = self.data * other
@@ -760,11 +776,7 @@ class HyperspectralCube(NDData):
             if not self.has_same_referential_as(other):
                 raise TypeError("Cannot divide HyperspectralCubes with "
                                 "different referentials.")
-            result = self.divide(other)
-            result.x = self.x
-            result.y = self.y
-            result.z = self.z
-            return result
+            data = self.data / other.data
         else:
             # other types, numpy will raise when inappropriate
             data = self.data / other
@@ -799,11 +811,7 @@ class HyperspectralCube(NDData):
             if not self.has_same_referential_as(other):
                 raise TypeError("Cannot divide HyperspectralCubes with "
                                 "different referentials.")
-            result = other.divide(self)
-            result.x = self.x
-            result.y = self.y
-            result.z = self.z
-            return result
+            data = other.data / self.data
         else:
             # other types, numpy will raise when inappropriate
             data = other / self.data
@@ -838,19 +846,7 @@ class HyperspectralCube(NDData):
             if other.is_empty():
                 raise TypeError("Cannot exponentiate by an empty "
                                 "HyperspectralCube.")
-            if not self.has_same_referential_as(other):
-                raise TypeError("Cannot exponentiate HyperspectralCubes with "
-                                "different referentials.")
-            #result = self.exponentiate(other)  # <= not implemented yet
-            # result.x = self.x
-            # result.y = self.y
-            # result.z = self.z
-            # return result
-
-            # Meanwhile, ...
-            raise NotImplementedError("There is no mainstream support for "
-                                      "exponentiation yet in "
-                                      "astropy.nddata.NDData.")
+            data = self.data ** other.data
         else:
             # other types, numpy will raise when inappropriate
             data = self.data ** other
@@ -878,7 +874,10 @@ class HyperspectralCube(NDData):
             raise TypeError("Can't exponentiate by an empty HyperspectralCube.")
 
         if isinstance(other, HyperspectralCube):
-            raise NotImplementedError("Wait... WHAT ? This should use __pow__.")
+            if other.is_empty():
+                raise TypeError("Cannot exponentiate to an empty "
+                                "HyperspectralCube.")
+            data = other.data ** self.data
         else:
             # other types, numpy will raise when inappropriate
             data = other ** self.data

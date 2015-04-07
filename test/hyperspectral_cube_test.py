@@ -10,7 +10,8 @@ from ddt import ddt, data
 
 import astropy.units as u
 
-from hyperspectral import HyperspectralCube, Axis
+from lib import HyperspectralCube, Axis
+# from hyperspectral import HyperspectralCube, Axis
 from numpy_ndarray_assertions import NumpyNdArrayAssertions
 
 logging.basicConfig(level=logging.DEBUG)
@@ -372,11 +373,17 @@ class HyperspectralCubeTest(unittest.TestCase, NumpyNdArrayAssertions):
         self.assertArrayEqual(data_a_plus_i, cube_a_plus_i.data,
                               "Supports addition of cube and image using +")
 
-        # IMAGE + CUBE
-        # This is tricky : it yields a numpy.ndarray because numpy is flexible
+        # NDARRAY + CUBE
+        # These are tricky : yields a numpy.ndarray because numpy is flexible
         # in what it accepts as the right hand operator, and it accepts our
-        # HyperspectralCube because it provides the `shape` property, so our
+        # HyperspectralCube because it provides the `__array__` method, so our
         # __radd__ method is never even called.
+        cube_b_plus_a = data_b + cube_a
+        self.assertIsInstance(cube_b_plus_a, numpy.ndarray,
+                              "Addition result is a numpy.ndarray")
+        self.assertArrayEqual(data_a_plus_b, cube_b_plus_a,
+                              "Supports addition of image and cube using +")
+        # IMAGE + CUBE
         cube_a_plus_i = data_i + cube_a
         self.assertIsInstance(cube_a_plus_i, numpy.ndarray,
                               "Addition result is a numpy.ndarray")
